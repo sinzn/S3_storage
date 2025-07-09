@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChaiCode S3 Storage</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts - Inter and Monospace for code/data -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            /* Using the darkest color from the palette for the background */
+            background: linear-gradient(135deg, #09122C 0%, #1a2039 100%); /* Slightly lighter shade for gradient end */
+        }
+        /* Apply monospace font to specific elements or globally for data display */
+        .monospace-font {
+            font-family: 'Space Mono', monospace;
+        }
+        /* Custom scrollbar for dark theme */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #222; /* Darker track */
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #444; /* Darker thumb */
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #666; /* Even darker thumb on hover */
+        }
+        /* Ensure table cells allow text wrapping for long names */
+        .table-cell-wrap {
+            white-space: normal; /* Allow text to wrap */
+            word-break: break-word; /* Break long words */
+        }
+    </style>
+</head>
+<body class="min-h-screen text-gray-100 py-8 md:p-8 flex flex-col items-center justify-center">
+
+    <!-- Header -->
+    <header class="w-full flex justify-between items-center mb-8 px-4">
+        <h1 class="text-3xl font-extrabold text-white drop-shadow-lg">ChaiCode Storage</h1>
+        <div class="flex items-center space-x-4">
+            <span id="bucket-status" class="hidden text-sm px-3 py-1 rounded-full bg-green-700 text-white items-center shadow-md">
+                <span class="w-2 h-2 rounded-full bg-white mr-2 animate-pulse"></span>
+                <span id="connected-bucket-name"></span>
+            </span>
+            <button id="disconnect-button" class="hidden bg-[#7B2D46] hover:bg-[#5a2034] text-white px-4 py-2 rounded-lg shadow-md transition duration-200 transform hover:scale-105">
+                Disconnect
+            </button>
+            <button id="connect-button" class="bg-[#C8465D] hover:bg-[#a53a4c] text-white px-4 py-2 rounded-lg shadow-md transition duration-200 transform hover:scale-105">
+                Connect
+            </button>
+        </div>
+    </header>
+
+    <!-- Connection Form (Login Page) -->
+    <div id="connection-form" class="bg-gray-900 p-8 rounded-xl shadow-2xl w-full max-w-md mx-auto transform transition-all duration-300 scale-100 opacity-100 border border-gray-700">
+        <h2 class="text-3xl font-bold mb-6 text-white text-center">Connect to S3</h2>
+        <div id="error-message" class="hidden bg-red-900 text-red-300 p-3 rounded-md mb-4 text-sm border border-red-700"></div>
+        <div class="space-y-5 mb-6">
+            <div>
+                <label for="accessKeyId" class="block text-sm font-medium text-gray-300 mb-1">
+                    Access Key ID
+                </label>
+                <input
+                    type="password"
+                    id="accessKeyId"
+                    class="w-full p-3 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:ring-[#C8465D] focus:border-[#C8465D] transition duration-200"
+                    placeholder="Your AWS Access Key ID"
+                />
+            </div>
+            <div>
+                <label for="secretAccessKey" class="block text-sm font-medium text-gray-300 mb-1">
+                    Secret Access Key
+                </label>
+                <input
+                    type="password"
+                    id="secretAccessKey"
+                    class="w-full p-3 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:ring-[#C8465D] focus:border-[#C8465D] transition duration-200"
+                    placeholder="Your AWS Secret Access Key"
+                />
+            </div>
+            <div>
+                <label for="region" class="block text-sm font-medium text-gray-300 mb-1">
+                    Region
+                </label>
+                <input
+                    type="text"
+                    id="region"
+                    class="w-full p-3 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:ring-[#C8465D] focus:border-[#C8465D] transition duration-200"
+                    value="us-east-1"
+                    placeholder="e.g., us-east-1"
+                />
+            </div>
+            <div>
+                <label for="bucketName" class="block text-sm font-medium text-gray-300 mb-1">
+                    Bucket Name
+                </label>
+                <input
+                    type="text"
+                    id="bucketName"
+                    class="w-full p-3 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:ring-[#C8465D] focus:border-[#C8465D] transition duration-200"
+                    placeholder="Your S3 Bucket Name"
+                />
+            </div>
+        </div>
+        <button id="submit-connect" class="w-full bg-[#C8465D] hover:bg-[#a53a4c] text-white font-semibold py-3 px-4 rounded-lg shadow-lg transition duration-200 transform hover:scale-105">
+            Connect to S3
+        </button>
+        <p class="text-xs text-gray-400 mt-6 text-center">
+            <strong class="text-red-400">Security Warning:</strong> AWS credentials are sent to the Node.js server. For production, consider using IAM roles or Cognito for more robust security.
+        </p>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard" class="hidden bg-gray-900 p-8 rounded-xl shadow-2xl w-full mx-auto border border-gray-700">
+        <div id="dashboard-error-message" class="hidden bg-red-900 text-red-300 p-3 rounded-md mb-6 text-sm border border-red-700"></div>
+
+        <!-- Path and Navigation -->
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 space-y-4 sm:space-y-0">
+            <div class="flex items-center space-x-2 text-gray-400 text-lg flex-wrap">
+                <span class="text-gray-300">Current Path:</span>
+                <span id="current-path" class="monospace-font font-bold text-gray-300 break-all">/</span>
+            </div>
+            <div class="flex items-center space-x-3">
+                <button id="go-back-button" class="hidden bg-gray-700 hover:bg-gray-600 text-gray-300 px-4 py-2 rounded-lg shadow-md flex items-center transition duration-200 transform hover:scale-105">
+                    <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                        <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                    </svg>
+                    Back
+                </button>
+                <button id="new-folder-button" class="bg-[#7B2D46] hover:bg-[#5a2034] text-white px-4 py-2 rounded-lg shadow-md flex items-center transition duration-200 transform hover:scale-105">
+                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                        <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd"></path>
+                    </svg>
+                    New Folder
+                </button>
+            </div>
+        </div>
+
+        <!-- Search and Filter -->
+        <div class="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-4 mb-6">
+            <div class="relative flex-grow w-full sm:w-auto">
+                <input
+                    type="text"
+                    id="search-input"
+                    placeholder="Search files and folders..."
+                    class="w-full p-3 pl-10 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:ring-[#C8465D] focus:border-[#C8465D] transition duration-200"
+                />
+                <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                    <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"></path>
+                </svg>
+            </div>
+            <div class="relative w-full sm:w-auto">
+                <select
+                    id="filter-select"
+                    class="appearance-none p-3 pr-8 rounded-lg bg-gray-800 border border-gray-700 text-white focus:ring-[#C8465D] focus:border-[#C8465D] w-full cursor-pointer transition duration-200"
+                >
+                    <option value="all">All Types</option>
+                    <option value="image">Image</option>
+                    <option value="video">Video</option>
+                    <option value="document">Document</option>
+                    <option value="folder">Folder</option>
+                    <option value="file">File (Other)</option>
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400">
+                    <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                        <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <!-- Drag and Drop Area -->
+        <label for="file-upload" id="drop-area" class="block border-2 border-dashed border-gray-700 rounded-lg p-8 text-center cursor-pointer hover:border-gray-500 hover:bg-gray-800 transition duration-200 mb-6">
+            <input id="file-upload" type="file" multiple class="hidden" />
+            <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <p class="mt-2 text-sm text-gray-400">Drag & Drop files here or <span class="text-white font-semibold">click to upload</span></p>
+        </label>
+
+        <!-- Upload Progress Bar -->
+        <div id="upload-progress-container" class="hidden bg-gray-800 rounded-lg p-4 mb-6 shadow-inner">
+            <div class="flex justify-between items-center mb-2">
+                <span class="text-white text-sm">Uploading: <span id="upload-file-name" class="monospace-font font-medium"></span></span>
+                <span id="upload-percentage" class="text-gray-300 font-bold text-sm">0%</span>
+            </div>
+            <div class="w-full bg-gray-700 rounded-full h-2.5 mb-2">
+                <div id="upload-progress-bar" class="bg-[#F08080] h-2.5 rounded-full transition-all duration-300 ease-out" style="width: 0%"></div>
+            </div>
+            <div class="flex justify-between text-xs text-gray-400">
+                <span id="upload-speed">Speed: 0 KB/s</span>
+                <span id="upload-eta">ETA: Calculating...</span>
+            </div>
+        </div>
+
+        <!-- Bulk Actions -->
+        <div id="bulk-actions" class="hidden flex justify-end space-x-3 mb-4">
+            <button id="delete-selected-button" class="bg-[#7B2D46] hover:bg-[#5a2034] text-white px-4 py-2 rounded-lg shadow-md transition duration-200 transform hover:scale-105">
+                Delete Selected
+            </button>
+            <button id="share-selected-button" class="bg-[#C8465D] hover:bg-[#a53a4c] text-white px-4 py-2 rounded-lg shadow-md transition duration-200 transform hover:scale-105">
+                Share Selected
+            </button>
+        </div>
+
+        <!-- File List -->
+        <div id="file-list-container" class="overflow-x-auto rounded-lg border border-gray-700">
+            <!-- File list will be rendered here by script.js -->
+            <div id="loading-indicator" class="text-center py-8 text-gray-400 hidden">Loading files...</div>
+            <div id="no-files-message" class="text-center py-8 text-gray-400 hidden">No files found.</div>
+            <table id="file-table" class="min-w-full divide-y divide-gray-700 hidden">
+                <thead class="bg-gray-800">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider rounded-tl-lg">
+                            <input type="checkbox" id="select-all-checkbox" class="form-checkbox h-4 w-4 text-white bg-gray-700 border-gray-600 rounded focus:ring-gray-500">
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                            Name
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                            Type
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                            Size
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                            Last Modified
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider rounded-tr-lg">
+                            Actions
+                        </th>
+                    </tr>
+                </thead>
+                <tbody id="file-table-body" class="bg-gray-900 divide-y divide-gray-800">
+                    <!-- File rows will be appended here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Custom Alert/Confirmation Modal -->
+    <div id="custom-modal" class="hidden fixed inset-0 bg-gray-950 bg-opacity-75 flex items-center justify-center z-50">
+        <div class="bg-gray-900 p-6 rounded-lg shadow-xl max-w-sm w-full border border-gray-700">
+            <h3 id="modal-title" class="text-xl font-semibold mb-4 text-white"></h3>
+            <p id="modal-message" class="text-gray-300 mb-6"></p>
+            <div class="flex justify-end space-x-4">
+                <button id="modal-cancel-button" class="hidden bg-gray-700 hover:bg-gray-600 text-gray-300 px-4 py-2 rounded-lg transition duration-200 transform hover:scale-105">Cancel</button>
+                <button id="modal-ok-button" class="bg-[#C8465D] hover:bg-[#a53a4c] text-white px-4 py-2 rounded-lg transition duration-200 transform hover:scale-105">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Input Modal (for New Folder) -->
+    <div id="input-modal" class="hidden fixed inset-0 bg-gray-950 bg-opacity-75 flex items-center justify-center z-50">
+        <div class="bg-gray-900 p-6 rounded-lg shadow-xl max-w-sm w-full border border-gray-700">
+            <h3 id="input-modal-title" class="text-xl font-semibold mb-4 text-white"></h3>
+            <input type="text" id="input-modal-field" class="w-full p-3 rounded-lg bg-gray-800 border border-gray-700 text-white focus:ring-[#C8465D] focus:border-[#C8465D] mb-6 transition duration-200" />
+            <div id="input-modal-error" class="hidden text-red-300 text-sm mb-4"></div>
+            <div class="flex justify-end space-x-4">
+                <button id="input-modal-cancel-button" class="bg-gray-700 hover:bg-gray-600 text-gray-300 px-4 py-2 rounded-lg transition duration-200 transform hover:scale-105">Cancel</button>
+                <button id="input-modal-ok-button" class="bg-[#C8465D] hover:bg-[#a53a4c] text-white px-4 py-2 rounded-lg transition duration-200 transform hover:scale-105">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Share File Modal -->
+    <div id="share-modal" class="hidden fixed inset-0 bg-gray-950 bg-opacity-75 flex items-center justify-center z-50">
+        <div class="bg-gray-900 p-6 rounded-lg shadow-xl max-w-md w-full border border-gray-700">
+            <h3 class="text-xl font-semibold mb-4 text-white">Share File</h3>
+            <p class="text-gray-300 mb-4">Select expiry time for the shareable link:</p>
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <label class="flex items-center cursor-pointer">
+                    <input type="radio" name="share-expiry" value="1d" class="form-radio text-white h-4 w-4">
+                    <span class="ml-2 text-gray-300">1 Day</span>
+                </label>
+                <label class="flex items-center cursor-pointer">
+                    <input type="radio" name="share-expiry" value="1w" class="form-radio text-white h-4 w-4">
+                    <span class="ml-2 text-gray-300">1 Week</span>
+                </label>
+                <label class="flex items-center cursor-pointer">
+                    <input type="radio" name="share-expiry" value="1m" class="form-radio text-white h-4 w-4">
+                    <span class="ml-2 text-gray-300">1 Month</span>
+                </label>
+                <label class="flex items-center cursor-pointer">
+                    <input type="radio" name="share-expiry" value="custom" class="form-radio text-white h-4 w-4">
+                    <span class="ml-2 text-gray-300">Custom (minutes)</span>
+                </label>
+            </div>
+            <input type="number" id="custom-expiry-minutes" class="w-full p-3 rounded-lg bg-gray-800 border border-gray-700 text-white focus:ring-[#C8465D] focus:border-[#C8465D] mb-4 hidden transition duration-200" placeholder="Enter minutes">
+            <div id="share-link-result" class="hidden bg-gray-800 p-3 rounded-md mb-4 break-all monospace-font text-gray-300 border border-gray-700"></div>
+            <div id="share-modal-error" class="hidden text-red-300 text-sm mb-4"></div>
+            <div class="flex justify-end space-x-4">
+                <button id="share-modal-close-button" class="bg-gray-700 hover:bg-gray-600 text-gray-300 px-4 py-2 rounded-lg transition duration-200 transform hover:scale-105">Close</button>
+                <button id="generate-share-link-button" class="bg-[#C8465D] hover:bg-[#a53a4c] text-white px-4 py-2 rounded-lg shadow-md transition duration-200 transform hover:scale-105">Generate Link</button>
+                <button id="copy-share-link-button" class="hidden bg-[#C8465D] hover:bg-[#a53a4c] text-white px-4 py-2 rounded-lg shadow-md transition duration-200 transform hover:scale-105">Copy Link</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script src="script.js"></script>
+</body>
+</html>
